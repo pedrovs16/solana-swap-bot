@@ -5,7 +5,8 @@
     "license": "MIT",
     "scripts": {
         "swap": "ts-node src/main.ts",
-        "websocket": "ts-node src/websocket.ts"
+        "websocket": "ts-node src/websocket.ts",
+        "test": "ts-node src/test.ts"
     },
     "dependencies": {
         "@project-serum/serum": "^0.13.65",
