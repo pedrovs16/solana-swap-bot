@@ -207,16 +207,21 @@ const makeSwapInstruction = async (
 
 
 // 1111111111
-const executeTransaction = async (swapAmountIn: number, tokenToBuy: string) => {
+export const executeTransaction = async (swapAmountIn: number, tokenToBuy: string, ammId: string) => {
   const connection = new Connection("https://api.mainnet-beta.solana.com");
   const secretKey = bs58.decode("4uBeiZZxB9swkzuxeJ2uGm3jAiTFcoQtJarr5uDHZnFMiZEdMkSh9jGv32D3pcsNAk9Uwbp8YDPao7QTLTWGVzHB");
   const keyPair = Keypair.fromSecretKey(secretKey);
-  const ammId = "58oQChx4yWmvKdwLLZzBi4ChoCc2fqCUWBkwMihLYQo2"; // Address of the SOL-USDC pool on mainnet
-  const slippage = 1; // 2% slippage tolerance
-
+  // const ammId = "3XAeQAeiNPaKz4MhQ15JKLQz7YBuAPWDAJSGJb3YiRfj"; // Address of the SOL-USDC pool on mainnet
+  const slippage = 2; // 2% slippage tolerance
+  const currentTime1 = new Date().toLocaleTimeString();
+  console.log("Current Time1:", currentTime1);
   const poolKeys = await getPoolKeys(ammId, connection);
+  const currentTime2 = new Date().toLocaleTimeString();
+  console.log("Current Time2:", currentTime2);
   if (poolKeys) {
     const poolInfo = await Liquidity.fetchInfo({ connection, poolKeys });
+    const currentTime3 = new Date().toLocaleTimeString();
+    console.log("Current Time3:", currentTime3);
     const txn = new Transaction();
     const {
       swapIX,
@@ -232,6 +237,8 @@ const executeTransaction = async (swapAmountIn: number, tokenToBuy: string) => {
       poolInfo,
       keyPair,
     );
+    const currentTime4 = new Date().toLocaleTimeString();
+    console.log("Current Time4:", currentTime4);
     if (tokenIn.toString() == WSOL.mint) {
       // Convert SOL to Wrapped SOL
       txn.add(
@@ -244,10 +251,14 @@ const executeTransaction = async (swapAmountIn: number, tokenToBuy: string) => {
       );
     }
     txn.add(swapIX);
+    const currentTime5 = new Date().toLocaleTimeString();
+    console.log("Current Time5:", currentTime5);
     const hash = await sendAndConfirmTransaction(connection, txn, [keyPair], {
       skipPreflight: false,
       preflightCommitment: "confirmed",
     });
+    const currentTime6 = new Date().toLocaleTimeString();
+    console.log("Current Time6:", currentTime6);
     console.log("Transaction Completed Successfully 🎉🚀.");
     console.log(`Explorer URL: https://solscan.io/tx/${hash}`);
   } else {
@@ -256,7 +267,8 @@ const executeTransaction = async (swapAmountIn: number, tokenToBuy: string) => {
 };
 
 
-executeTransaction(
-    0.0001,
-    "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" // USDC Address
-)
+// executeTransaction(
+//     0.0001,
+//     // "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" // USDC Address
+//     "8UZLqAhkYZs9McdPv4gDxScC2ARyBjYuYVcNY3nbpump"
+// )
