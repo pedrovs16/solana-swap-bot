@@ -1,0 +1,24 @@
+{
+    "name": "raydium-swap",
+    "version": "1.0.0",
+    "main": "main.js",
+    "license": "MIT",
+    "scripts": {
+        "swap": "ts-node src/main.ts",
+        "websocket": "ts-node src/websocket.ts"
+    },
+    "dependencies": {
+        "@project-serum/serum": "^0.13.65",
+        "@raydium-io/raydium-sdk": "1.3.1-beta.58",
+        "@solana/spl-token": "^0.4.8",
+        "@solana/web3.js": "^1.89.1",
+        "bn.js": "^5.2.1",
+        "bs58": "^6.0.0",
+        "buffer-layout": "^1.2.2"
+    },
+    "devDependencies": {
+        "prettier": "^3.3.3",
+        "typescript": "^5.6.2"
+    },
+    "packageManager": "pnpm@9.11.0"
+}
