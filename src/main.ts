@@ -29,6 +29,7 @@ import bs58 from 'bs58';
 
 const BN = require('bn.js');
 
+const ASSOCIATED_TOKEN_SOL_WALLET = new PublicKey('Dsb9A5NuufLgdigpWnC6LXrjCyjG9RcWyN1fbpF2vGuv'); // TODO: Make it a env var
 const getPoolKeys = async (ammId: string, connection: Connection) => {
     const ammAccount = await connection.getAccountInfo(new PublicKey(ammId));
     if (ammAccount) {
@@ -130,14 +131,7 @@ const makeSwapInstruction = async (
 
     if (tokenIn.toString() == WSOL.mint) {
         console.log(111111111111);
-        tokenInAccount = (
-            await getOrCreateAssociatedTokenAccount(
-                connection,
-                keyPair,
-                NATIVE_MINT,
-                keyPair.publicKey
-            )
-        ).address;
+        tokenInAccount = ASSOCIATED_TOKEN_SOL_WALLET;
         console.log(tokenInAccount);
         tokenOutAccount = (
             await getOrCreateAssociatedTokenAccount(
@@ -150,14 +144,7 @@ const makeSwapInstruction = async (
         console.log(tokenOutAccount);
     } else {
         console.log(5555555555);
-        tokenOutAccount = (
-            await getOrCreateAssociatedTokenAccount(
-                connection,
-                keyPair,
-                NATIVE_MINT,
-                keyPair.publicKey
-            )
-        ).address;
+        tokenOutAccount = ASSOCIATED_TOKEN_SOL_WALLET;
         console.log(6666666666);
         tokenInAccount = (
             await getOrCreateAssociatedTokenAccount(connection, keyPair, tokenIn, keyPair.publicKey)
