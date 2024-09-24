@@ -1,4 +1,4 @@
-import { executeTransaction } from './main';
+import { executeTransaction } from './main.js';
 
 // executeTransaction(
 //     0.0001,

@@ -26,11 +26,13 @@ import {
     TransactionInstruction,
 } from '@solana/web3.js';
 import bs58 from 'bs58';
-
-const BN = require('bn.js');
+import logger from './logger.js';
+import BN from 'bn.js';
 
 const ASSOCIATED_TOKEN_SOL_WALLET = new PublicKey('Dsb9A5NuufLgdigpWnC6LXrjCyjG9RcWyN1fbpF2vGuv'); // TODO: Make it a env var
+
 const getPoolKeys = async (ammId: string, connection: Connection) => {
+    logger.info('Getting Pool Keys', { ammId });
     const ammAccount = await connection.getAccountInfo(new PublicKey(ammId));
     if (ammAccount) {
         const poolState = LIQUIDITY_STATE_LAYOUT_V4.decode(ammAccount.data);
@@ -80,6 +82,7 @@ const calculateAmountOut = async (
     amountIn: number,
     rawSlippage: number
 ) => {
+    logger.info('Calculating Amount Out', { tokenToBuy, amountIn, rawSlippage });
     let tokenOutMint = new PublicKey(tokenToBuy);
     let tokenOutDecimals = poolKeys.baseMint.equals(tokenOutMint)
         ? poolInfo.baseDecimals
@@ -118,7 +121,7 @@ const makeSwapInstruction = async (
     poolInfo: LiquidityPoolInfo,
     keyPair: Keypair
 ) => {
-    console.log('Making Swap Instruction...');
+    logger.info('Making Swap Instruction', { tokenToBuy, rawAmountIn, slippage });
     const { amountIn, tokenIn, tokenOut, minAmountOut } = await calculateAmountOut(
         poolKeys,
         poolInfo,
@@ -126,13 +129,13 @@ const makeSwapInstruction = async (
         rawAmountIn,
         slippage
     );
+    logger.info('Token and ammount for transaction', { amountIn, tokenIn, tokenOut, minAmountOut });
     let tokenInAccount: PublicKey;
     let tokenOutAccount: PublicKey;
 
     if (tokenIn.toString() == WSOL.mint) {
-        console.log(111111111111);
         tokenInAccount = ASSOCIATED_TOKEN_SOL_WALLET;
-        console.log(tokenInAccount);
+        logger.info('Getting or creating Token Out Account');
         tokenOutAccount = (
             await getOrCreateAssociatedTokenAccount(
                 connection,
@@ -141,15 +144,12 @@ const makeSwapInstruction = async (
                 keyPair.publicKey
             )
         ).address;
-        console.log(tokenOutAccount);
     } else {
-        console.log(5555555555);
         tokenOutAccount = ASSOCIATED_TOKEN_SOL_WALLET;
-        console.log(6666666666);
+        logger.info('Getting or creating Token In Account');
         tokenInAccount = (
             await getOrCreateAssociatedTokenAccount(connection, keyPair, tokenIn, keyPair.publicKey)
         ).address;
-        console.log(7777777777);
     }
 
     const ix = new TransactionInstruction({
@@ -197,23 +197,27 @@ export const executeTransaction = async (
     tokenToBuy: string,
     ammId: string
 ) => {
-    const connection = new Connection('https://api.mainnet-beta.solana.com');
-    const secretKey = bs58.decode(
-        '4uBeiZZxB9swkzuxeJ2uGm3jAiTFcoQtJarr5uDHZnFMiZEdMkSh9jGv32D3pcsNAk9Uwbp8YDPao7QTLTWGVzHB'
-    );
-    const keyPair = Keypair.fromSecretKey(secretKey);
-    const slippage = 2; // 2% slippage tolerance
+    try {
+        logger.info('Starting Transaction', { swapAmountIn, tokenToBuy, ammId });
+        const connection = new Connection('https://api.mainnet-beta.solana.com');
 
-    const currentTime1 = new Date().toLocaleTimeString();
-    console.log('Current Time1:', currentTime1);
-    const poolKeys = await getPoolKeys(ammId, connection);
-    const currentTime2 = new Date().toLocaleTimeString();
-    console.log('Current Time2:', currentTime2);
-    if (poolKeys) {
+        // Use environment variable for secret key
+        const secretKey = bs58.decode(
+            '4uBeiZZxB9swkzuxeJ2uGm3jAiTFcoQtJarr5uDHZnFMiZEdMkSh9jGv32D3pcsNAk9Uwbp8YDPao7QTLTWGVzHB'
+        );
+        const keyPair = Keypair.fromSecretKey(secretKey);
+        const slippage = 2; // 2% slippage tolerance
+
+        const poolKeys = await getPoolKeys(ammId, connection);
+        if (!poolKeys) {
+            logger.error(`Could not get PoolKeys for AMM: ${ammId}`);
+            return;
+        }
+
+        logger.info('Getting Pool Info');
         const poolInfo = await Liquidity.fetchInfo({ connection, poolKeys });
-        const currentTime3 = new Date().toLocaleTimeString();
-        console.log('Current Time3:', currentTime3);
         const txn = new Transaction();
+
         const { swapIX, tokenInAccount, tokenIn, amountIn } = await makeSwapInstruction(
             connection,
             tokenToBuy,
@@ -223,8 +227,8 @@ export const executeTransaction = async (
             poolInfo,
             keyPair
         );
-        const currentTime4 = new Date().toLocaleTimeString();
-        console.log('Current Time4:', currentTime4);
+
+        logger.info('Creating Transaction');
         if (tokenIn.toString() == WSOL.mint) {
             // Convert SOL to Wrapped SOL
             txn.add(
@@ -236,18 +240,17 @@ export const executeTransaction = async (
                 createSyncNativeInstruction(tokenInAccount, TOKEN_PROGRAM_ID)
             );
         }
+
         txn.add(swapIX);
-        const currentTime5 = new Date().toLocaleTimeString();
-        console.log('Current Time5:', currentTime5);
+        logger.info('Sending Transaction');
         const hash = await sendAndConfirmTransaction(connection, txn, [keyPair], {
             skipPreflight: false,
             preflightCommitment: 'confirmed',
         });
-        const currentTime6 = new Date().toLocaleTimeString();
-        console.log('Current Time6:', currentTime6);
-        console.log('Transaction Completed Successfully 🎉🚀.');
-        console.log(`Explorer URL: https://solscan.io/tx/${hash}`);
-    } else {
-        console.log(`Could not get PoolKeys for AMM: ${ammId}`);
+
+        logger.info('Transaction Completed Successfully 🎉🚀.');
+        logger.info(`Explorer URL: https://solscan.io/tx/${hash}`);
+    } catch (error: any) {
+        logger.error('Transaction failed', { error: error.message });
     }
 };

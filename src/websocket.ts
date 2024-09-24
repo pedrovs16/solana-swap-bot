@@ -1,5 +1,6 @@
 import { Connection, PublicKey } from '@solana/web3.js';
-import { executeTransaction } from './main';
+import { executeTransaction } from './main.js';
+import logger from './logger.js';
 
 const RAYDIUM_PUBLIC_KEY = '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8';
 const HTTP_URL = 'https://api.mainnet-beta.solana.com/';
@@ -14,17 +15,18 @@ const connection = new Connection(HTTP_URL, {
 const processedSignatures = new Set<string>();
 
 async function streamNewPools(connection: Connection, programAddress: PublicKey): Promise<void> {
-    console.log('Monitoring logs for program:', programAddress.toString());
+    const streamProgramPublicKey = programAddress.toString();
+    logger.info('Monitoring logs for program:', { streamProgramPublicKey });
 
     connection.onLogs(programAddress, async ({ logs, err, signature }) => {
         if (err) return;
         if (processedSignatures.has(signature)) {
-            console.log(`Signature ${signature} already processed. Skipping...`);
+            logger.debug(`Signature already processed. Skipping...`, { signature });
             return;
         }
         if (logs && logs.some((log) => log.includes(INSTRUCTION_NAME))) {
             processedSignatures.add(signature);
-            console.log("Signature for 'initialize2':", `https://solscan.io/tx/${signature}`);
+            logger.info("Signature for 'initialize2':", `https://solscan.io/tx/${signature}`);
             const mintData = await fetchRaydiumMints(signature, connection);
             if (mintData !== null) {
                 await executeTransaction(SOL_TO_TRADE, mintData.tokenAccount, mintData.ammId);
@@ -43,13 +45,12 @@ async function fetchRaydiumMints(
             commitment: 'confirmed',
         });
 
-        //@ts-ignore
-        const accounts = (tx?.transaction.message.instructions).find(
+        const accounts = (tx?.transaction.message.instructions as any[]).find(
             (ix) => ix.programId.toBase58() === RAYDIUM_PUBLIC_KEY
-            //@ts-ignore
-        ).accounts as PublicKey[];
+        )?.accounts as PublicKey[];
+
         if (!accounts) {
-            console.log('No accounts found in the transaction.');
+            logger.info('No accounts found in the transaction.');
             return null;
         }
 
@@ -66,7 +67,7 @@ async function fetchRaydiumMints(
             { Token: 'B', 'Account Public Key': tokenBAccount.toBase58() },
         ];
 
-        console.table(displayData);
+        console.log('Display Data:', displayData);
         let tokenAccount;
         if (tokenAAccount.toBase58() !== 'So11111111111111111111111111111111111111112') {
             tokenAccount = tokenAAccount.toBase58();
@@ -75,11 +76,11 @@ async function fetchRaydiumMints(
         } else {
             return null;
         }
-        console.log('AMM ID:', ammId);
-        console.log('Token Account:', tokenAccount);
+        logger.info('AMM ID:', { ammId });
+        logger.info('Token Account:', { tokenAccount });
         return { ammId, tokenAccount };
-    } catch {
-        console.log('Error fetching transaction:', txId);
+    } catch (error) {
+        logger.error('Error fetching transaction:', { txId, error });
         return null;
     }
 }
