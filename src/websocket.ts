@@ -1,13 +1,16 @@
 import { Connection, PublicKey } from '@solana/web3.js';
 import { executeTransaction } from './main.js';
 import logger from './logger.js';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const RAYDIUM_PUBLIC_KEY = '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8';
-const HTTP_URL = 'https://api.mainnet-beta.solana.com/';
-const WSS_URL = 'wss://api.mainnet-beta.solana.com/';
+const HTTP_URL = `https://${process.env.SOLANA_URL}/`;
+const WSS_URL = `wss://${process.env.SOLANA_URL}/`;
 const RAYDIUM = new PublicKey(RAYDIUM_PUBLIC_KEY);
 const INSTRUCTION_NAME = 'initialize2';
-const SOL_TO_TRADE = 0.00001;
+const SOL_TO_TRADE = process.env.SOL_TO_TRADE;
 const connection = new Connection(HTTP_URL, {
     wsEndpoint: WSS_URL,
 });
@@ -16,6 +19,7 @@ const processedSignatures = new Set<string>();
 
 async function streamNewPools(connection: Connection, programAddress: PublicKey): Promise<void> {
     const streamProgramPublicKey = programAddress.toString();
+    console.log('Stream Program Public Key:', streamProgramPublicKey);
     logger.info('Monitoring logs for program:', { streamProgramPublicKey });
 
     connection.onLogs(programAddress, async ({ logs, err, signature }) => {

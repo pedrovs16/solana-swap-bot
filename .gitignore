@@ -53,6 +53,3 @@ Desktop.ini
 
 # Git files
 .git/
-
-# TypeScript typings
-*.d.ts

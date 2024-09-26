@@ -9,6 +9,9 @@
     "skipLibCheck": true
   },
   "ts-node": {
-    "esm": true
-  }
+    "experimentalSpecifierResolution": "node",
+    "transpileOnly": true,
+    "esm": true,
+  },
+  "include": ["src/**/*", "types/**/*"]
 }

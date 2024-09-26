@@ -11,11 +11,7 @@ import {
     Liquidity,
     WSOL,
 } from '@raydium-io/raydium-sdk';
-import {
-    createSyncNativeInstruction,
-    getOrCreateAssociatedTokenAccount,
-    NATIVE_MINT,
-} from '@solana/spl-token';
+import { createSyncNativeInstruction, getOrCreateAssociatedTokenAccount } from '@solana/spl-token';
 import {
     Connection,
     Keypair,
@@ -28,8 +24,12 @@ import {
 import bs58 from 'bs58';
 import logger from './logger.js';
 import BN from 'bn.js';
+import dotenv from 'dotenv';
 
-const ASSOCIATED_TOKEN_SOL_WALLET = new PublicKey('Dsb9A5NuufLgdigpWnC6LXrjCyjG9RcWyN1fbpF2vGuv'); // TODO: Make it a env var
+dotenv.config();
+
+const ASSOCIATED_TOKEN_SOL_WALLET = new PublicKey(process.env.ASSOCIATED_TOKEN_SOL_WALLET);
+const RAYDIUM_AUTHORITY = new PublicKey('5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1');
 
 const getPoolKeys = async (ammId: string, connection: Connection) => {
     logger.info('Getting Pool Keys', { ammId });
@@ -56,7 +56,7 @@ const getPoolKeys = async (ammId: string, connection: Connection) => {
                 baseMint: poolState.baseMint,
                 quoteMint: poolState.quoteMint,
                 version: 4,
-                authority: new PublicKey('5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1'),
+                authority: RAYDIUM_AUTHORITY,
                 openOrders: poolState.openOrders,
                 baseVault: poolState.baseVault,
                 quoteVault: poolState.quoteVault,
@@ -199,12 +199,9 @@ export const executeTransaction = async (
 ) => {
     try {
         logger.info('Starting Transaction', { swapAmountIn, tokenToBuy, ammId });
-        const connection = new Connection('https://api.mainnet-beta.solana.com');
+        const connection = new Connection(`https://${process.env.SOLANA_URL}`);
 
-        // Use environment variable for secret key
-        const secretKey = bs58.decode(
-            '4uBeiZZxB9swkzuxeJ2uGm3jAiTFcoQtJarr5uDHZnFMiZEdMkSh9jGv32D3pcsNAk9Uwbp8YDPao7QTLTWGVzHB'
-        );
+        const secretKey = bs58.decode(process.env.SOLANA_WALLET);
         const keyPair = Keypair.fromSecretKey(secretKey);
         const slippage = 2; // 2% slippage tolerance
 
@@ -229,6 +226,7 @@ export const executeTransaction = async (
         );
 
         logger.info('Creating Transaction');
+        // TODO: remove this in the future
         if (tokenIn.toString() == WSOL.mint) {
             // Convert SOL to Wrapped SOL
             txn.add(
