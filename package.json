@@ -6,7 +6,8 @@
     "scripts": {
         "swap": "node --loader ts-node/esm src/main.ts",
         "websocket": "node --loader ts-node/esm src/websocket.ts",
-        "test": "node --loader ts-node/esm src/test.ts"
+        "test": "node --loader ts-node/esm src/test.ts",
+        "closeAssociateAccounts": "node --loader ts-node/esm src/closeAssociateAccounts.ts"
     },
     "dependencies": {
         "@project-serum/serum": "^0.13.65",
