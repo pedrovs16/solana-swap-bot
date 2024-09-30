@@ -112,6 +112,8 @@ const calculateAmountOut = async (
     };
 };
 
+const WRAPPED_SOL_MINT = new PublicKey('So11111111111111111111111111111111111111112');
+
 const makeSwapInstruction = async (
     connection: Connection,
     tokenToBuy: string,
@@ -119,7 +121,8 @@ const makeSwapInstruction = async (
     slippage: number,
     poolKeys: LiquidityPoolKeys,
     poolInfo: LiquidityPoolInfo,
-    keyPair: Keypair
+    keyPair: Keypair,
+    tokenInAssociatedTokenPublicKey?: PublicKey
 ) => {
     logger.info('Making Swap Instruction', { tokenToBuy, rawAmountIn, slippage });
     const { amountIn, tokenIn, tokenOut, minAmountOut } = await calculateAmountOut(
@@ -134,7 +137,14 @@ const makeSwapInstruction = async (
     let tokenOutAccount: PublicKey;
 
     if (tokenIn.toString() == WSOL.mint) {
-        tokenInAccount = ASSOCIATED_TOKEN_SOL_WALLET;
+        tokenInAccount = (
+            await getOrCreateAssociatedTokenAccount(
+                connection,
+                keyPair,
+                WRAPPED_SOL_MINT,
+                keyPair.publicKey
+            )
+        ).address;
         logger.info('Getting or creating Token Out Account');
         tokenOutAccount = (
             await getOrCreateAssociatedTokenAccount(
@@ -144,6 +154,10 @@ const makeSwapInstruction = async (
                 keyPair.publicKey
             )
         ).address;
+    } else if (tokenInAssociatedTokenPublicKey) {
+        tokenOutAccount = ASSOCIATED_TOKEN_SOL_WALLET;
+        logger.info('Getting or creating Token In Account');
+        tokenInAccount = tokenInAssociatedTokenPublicKey;
     } else {
         tokenOutAccount = ASSOCIATED_TOKEN_SOL_WALLET;
         logger.info('Getting or creating Token In Account');
@@ -151,7 +165,9 @@ const makeSwapInstruction = async (
             await getOrCreateAssociatedTokenAccount(connection, keyPair, tokenIn, keyPair.publicKey)
         ).address;
     }
-
+    logger.info('TpoolKeys.programId:', poolKeys.programId);
+    logger.info('TpoolKeys.id:', poolKeys.id);
+    logger.info('TOKEN_PROGRAM_ID:', TOKEN_PROGRAM_ID);
     const ix = new TransactionInstruction({
         programId: new PublicKey(poolKeys.programId),
         keys: [
@@ -183,8 +199,8 @@ const makeSwapInstruction = async (
     });
     return {
         swapIX: ix,
-        tokenInAccount: tokenInAccount,
-        tokenOutAccount: tokenOutAccount,
+        tokenInAccount,
+        tokenOutAccount,
         tokenIn,
         tokenOut,
         amountIn,
@@ -196,48 +212,54 @@ export const executeTransaction = async (
     swapAmountIn: number,
     tokenToBuy: string,
     ammId: string
-) => {
+): Promise<{
+    tokensInBalance: number;
+    poolKeys: LiquidityPoolKeys;
+    poolInfo: LiquidityPoolInfo;
+    tokenOutAccount: PublicKey;
+} | null> => {
     try {
         logger.info('Starting Transaction', { swapAmountIn, tokenToBuy, ammId });
         const connection = new Connection(`https://${process.env.SOLANA_URL}`);
 
         const secretKey = bs58.decode(process.env.SOLANA_WALLET);
         const keyPair = Keypair.fromSecretKey(secretKey);
-        const slippage = 2; // 2% slippage tolerance
+        const slippage = 5; // 2% slippage tolerance
 
         const poolKeys = await getPoolKeys(ammId, connection);
         if (!poolKeys) {
             logger.error(`Could not get PoolKeys for AMM: ${ammId}`);
-            return;
+            return null;
         }
 
         logger.info('Getting Pool Info');
         const poolInfo = await Liquidity.fetchInfo({ connection, poolKeys });
         const txn = new Transaction();
 
-        const { swapIX, tokenInAccount, tokenIn, amountIn } = await makeSwapInstruction(
-            connection,
-            tokenToBuy,
-            swapAmountIn,
-            slippage,
-            poolKeys,
-            poolInfo,
-            keyPair
-        );
+        const { swapIX, tokenInAccount, tokenIn, amountIn, tokenOutAccount } =
+            await makeSwapInstruction(
+                connection,
+                tokenToBuy,
+                swapAmountIn,
+                slippage,
+                poolKeys,
+                poolInfo,
+                keyPair
+            );
 
         logger.info('Creating Transaction');
         // TODO: remove this in the future
-        if (tokenIn.toString() == WSOL.mint) {
-            // Convert SOL to Wrapped SOL
-            txn.add(
-                SystemProgram.transfer({
-                    fromPubkey: keyPair.publicKey,
-                    toPubkey: tokenInAccount,
-                    lamports: amountIn.raw.toNumber(),
-                }),
-                createSyncNativeInstruction(tokenInAccount, TOKEN_PROGRAM_ID)
-            );
-        }
+        // if (tokenIn.toString() == WSOL.mint) {
+        //     // Convert SOL to Wrapped SOL
+        //     txn.add(
+        //         SystemProgram.transfer({
+        //             fromPubkey: keyPair.publicKey,
+        //             toPubkey: tokenInAccount,
+        //             lamports: amountIn.raw.toNumber(),
+        //         }),
+        //         createSyncNativeInstruction(tokenInAccount, TOKEN_PROGRAM_ID)
+        //     );
+        // }
 
         txn.add(swapIX);
         logger.info('Sending Transaction');
@@ -248,7 +270,66 @@ export const executeTransaction = async (
 
         logger.info('Transaction Completed Successfully 🎉🚀.');
         logger.info(`Explorer URL: https://solscan.io/tx/${hash}`);
+        const tokenBalance = await connection.getTokenAccountBalance(tokenOutAccount);
+        const tokensInBalance = parseFloat(tokenBalance.value.amount);
+        console.log(`Tokens in balance: ${tokensInBalance}`);
+        return {
+            tokensInBalance,
+            poolKeys,
+            poolInfo,
+            tokenOutAccount,
+        };
     } catch (error: any) {
         logger.error('Transaction failed', { error: error.message });
+        return null;
+    }
+};
+
+export const executeTransactionSellingNewToken = async (
+    swapAmountIn: number,
+    tokenToSell: string,
+    ammId: string,
+    poolKeys: LiquidityPoolKeys,
+    poolInfo: LiquidityPoolInfo,
+    tokenInAssociatedTokenAccount: PublicKey
+): Promise<boolean> => {
+    try {
+        logger.info('Starting Transaction to sell new token', { swapAmountIn, tokenToSell, ammId });
+        const connection = new Connection(`https://${process.env.SOLANA_URL}`);
+
+        const secretKey = bs58.decode(process.env.SOLANA_WALLET);
+        const keyPair = Keypair.fromSecretKey(secretKey);
+        const slippage = 2; // 2% slippage tolerance
+
+        const txn = new Transaction();
+        const { swapIX, minAmountOut } = await makeSwapInstruction(
+            connection,
+            tokenToSell,
+            swapAmountIn,
+            slippage,
+            poolKeys,
+            poolInfo,
+            keyPair,
+            tokenInAssociatedTokenAccount
+        );
+        if (minAmountOut.raw.lte(new BN(process.env.SOL_TO_TRADE).muln(1.2))) {
+            logger.error('minAmountOut is not bigger enough');
+            return false;
+        }
+
+        logger.info('Creating Transaction to sell New Token');
+        txn.add(swapIX);
+        logger.info('Sending Transaction');
+        const hash = await sendAndConfirmTransaction(connection, txn, [keyPair], {
+            skipPreflight: false,
+            preflightCommitment: 'confirmed',
+        });
+
+        logger.info('Transaction Completed Successfully 🎉🚀.');
+        logger.info(`Explorer URL: https://solscan.io/tx/${hash}`);
+        return true;
+    } catch (error: any) {
+        logger.error('Transaction failed', { error: error.message });
+        return false;
     }
 };
