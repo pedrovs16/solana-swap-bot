@@ -64,8 +64,11 @@ async function fetchRaydiumMints(
 
         const tokenAAccount = accounts[tokenAIndex];
         const tokenBAccount = accounts[tokenBIndex];
-        const ammId = accounts[ammdIdIndex].toString();
-
+        let ammId = accounts[ammdIdIndex].toString();
+        if (ammId.startsWith('Sysvar')) {
+            ammId = accounts[ammdIdIndex + 1].toString();
+        }
+        console.log('ammId:', ammId);
         const displayData = [
             { Token: 'A', 'Account Public Key': tokenAAccount.toBase58() },
             { Token: 'B', 'Account Public Key': tokenBAccount.toBase58() },
