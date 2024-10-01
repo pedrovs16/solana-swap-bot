@@ -2,6 +2,7 @@ import { Connection, PublicKey } from '@solana/web3.js';
 import { executeTransaction } from './main.js';
 import logger from './logger.js';
 import dotenv from 'dotenv';
+import { LiquidityPoolInfo, LiquidityPoolKeys, MAINNET_PROGRAM_ID } from '@raydium-io/raydium-sdk';
 
 dotenv.config();
 
@@ -15,8 +16,43 @@ const connection = new Connection(HTTP_URL, {
     wsEndpoint: WSS_URL,
 });
 
-const processedSignatures = new Set<string>();
+let processedSignatures = false;
 
+async function handleNewToken(
+    swapAmountIn: number,
+    tokenAccount: string,
+    ammId: string,
+    poolKeys: LiquidityPoolKeys,
+    poolInfo: LiquidityPoolInfo,
+    newTokenAccount: PublicKey
+): Promise<void> {
+    let response = null;
+    while (!response) {
+        logger.info('Executing transaction to sell new token...', {
+            swapAmountIn,
+            tokenAccount,
+            ammId,
+            poolKeys,
+            poolInfo,
+            newTokenAccount,
+        });
+        response = await executeTransaction(
+            swapAmountIn / 1000000,
+            'So11111111111111111111111111111111111111112',
+            ammId
+        );
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        console.log('Response:', response);
+        // response = await executeTransactionSellingNewToken(
+        //     swapAmountIn,
+        //     tokenAccount,
+        //     ammId,
+        //     poolKeys,
+        //     poolInfo,
+        //     newTokenAccount
+        // );
+    }
+}
 async function streamNewPools(connection: Connection, programAddress: PublicKey): Promise<void> {
     const streamProgramPublicKey = programAddress.toString();
     console.log('Stream Program Public Key:', streamProgramPublicKey);
@@ -24,17 +60,38 @@ async function streamNewPools(connection: Connection, programAddress: PublicKey)
 
     connection.onLogs(programAddress, async ({ logs, err, signature }) => {
         if (err) return;
-        if (processedSignatures.has(signature)) {
-            logger.debug(`Signature already processed. Skipping...`, { signature });
-            return;
-        }
+
         if (logs && logs.some((log) => log.includes(INSTRUCTION_NAME))) {
-            processedSignatures.add(signature);
+            if (processedSignatures === true) {
+                logger.debug(`Already processing a signature. Skipping...`, { signature });
+                return;
+            }
+            processedSignatures = true;
             logger.info("Signature for 'initialize2':", `https://solscan.io/tx/${signature}`);
             const mintData = await fetchRaydiumMints(signature, connection);
-            if (mintData !== null) {
-                await executeTransaction(SOL_TO_TRADE, mintData.tokenAccount, mintData.ammId);
+            if (mintData === null) {
+                processedSignatures = false;
+                return;
             }
+            const response = await executeTransaction(
+                SOL_TO_TRADE,
+                mintData.tokenAccount,
+                mintData.ammId
+            );
+            if (!response) {
+                processedSignatures = false;
+                return;
+            }
+            const { tokensInBalance, poolKeys, poolInfo, tokenOutAccount } = response;
+            await handleNewToken(
+                tokensInBalance,
+                mintData.tokenAccount,
+                mintData.ammId,
+                poolKeys,
+                poolInfo,
+                tokenOutAccount
+            );
+            processedSignatures = false;
         }
     });
 }

@@ -11,7 +11,11 @@ import {
     Liquidity,
     WSOL,
 } from '@raydium-io/raydium-sdk';
-import { createSyncNativeInstruction, getOrCreateAssociatedTokenAccount } from '@solana/spl-token';
+import {
+    createAssociatedTokenAccount,
+    createSyncNativeInstruction,
+    getOrCreateAssociatedTokenAccount,
+} from '@solana/spl-token';
 import {
     Connection,
     Keypair,
@@ -20,6 +24,7 @@ import {
     SystemProgram,
     Transaction,
     TransactionInstruction,
+    ConfirmOptions,
 } from '@solana/web3.js';
 import bs58 from 'bs58';
 import logger from './logger.js';
@@ -131,6 +136,7 @@ const makeSwapInstruction = async (
         slippage
     );
     logger.info('Token and ammount for transaction', { amountIn, tokenIn, tokenOut, minAmountOut });
+    console.log('Token and ammount for transaction', tokenOut);
     let tokenInAccount: PublicKey;
     let tokenOutAccount: PublicKey;
 
@@ -139,14 +145,18 @@ const makeSwapInstruction = async (
         tokenInAccount = new PublicKey('3kt5jX4u4H2jvbUojn2oQ8ZudmVsLHVcbxcF5rwqcZ3D');
         console.log('tokenInAccount', tokenInAccount);
         logger.info('Getting or creating Token Out Account');
-        tokenOutAccount = (
-            await getOrCreateAssociatedTokenAccount(
-                connection,
-                keyPair,
-                tokenOut,
-                keyPair.publicKey
-            )
-        ).address;
+        const confirmOptions: ConfirmOptions = {
+            commitment: 'confirmed', // Specify the commitment level
+            preflightCommitment: 'processed', // Skip some checks to speed up
+        };
+        tokenOutAccount = await createAssociatedTokenAccount(
+            connection,
+            keyPair,
+            tokenOut,
+            keyPair.publicKey,
+            confirmOptions
+        );
+        await new Promise((resolve) => setTimeout(resolve, 7000));
     } else if (tokenInAssociatedTokenPublicKey) {
         logger.info('2');
         tokenOutAccount = ASSOCIATED_TOKEN_SOL_WALLET;
@@ -216,7 +226,7 @@ export const executeTransaction = async (
 
         const secretKey = bs58.decode(process.env.SOLANA_WALLET);
         const keyPair = Keypair.fromSecretKey(secretKey);
-        const slippage = 10; // 2% slippage tolerance
+        const slippage = 100; // 2% slippage tolerance
 
         const poolKeys = await getPoolKeys(ammId, connection);
         if (!poolKeys) {
@@ -228,7 +238,7 @@ export const executeTransaction = async (
         const poolInfo = await Liquidity.fetchInfo({ connection, poolKeys });
         const txn = new Transaction();
 
-        const { swapIX, tokenInAccount, tokenIn, amountIn, tokenOutAccount } =
+        const { swapIX, tokenInAccount, tokenIn, amountIn, tokenOutAccount, minAmountOut } =
             await makeSwapInstruction(
                 connection,
                 tokenToBuy,
@@ -251,6 +261,12 @@ export const executeTransaction = async (
         //         }),
         //         createSyncNativeInstruction(tokenInAccount, TOKEN_PROGRAM_ID)
         //     );
+        // }
+        // if (tokenToBuy.startsWith('So11')) {
+        //     if (minAmountOut.raw.toNumber() > process.env.SOL_TO_TRADE * 1.2) {
+        //         logger.info('Min amount out is greater than SOL_TO_TRADE');
+        //         return null;
+        //     }
         // }
 
         txn.add(swapIX);
